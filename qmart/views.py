@@ -2,6 +2,8 @@ from django.db import IntegrityError
 from django.http import JsonResponse
 import json
 import re
+
+from django.shortcuts import get_object_or_404
 from qmart.models import *
 from django.contrib.auth import authenticate, login, logout
 
@@ -112,6 +114,8 @@ def magnage_pro(request):
                     f.name = f"prod_{id}_img{count}."+ext
                     img = Images(id=None,image=f,img_pro=prod)
                     img.save()
+            elif request.method == 'PUT':
+                
                 return JsonResponse({"status":"Added Product Succesfully"},status=200 )
             return JsonResponse({"Err":"Invalid request method"},status=405)
         return JsonResponse({"Err":"Unautherized access"},status=401)
@@ -131,6 +135,14 @@ def manage_cart(request):
                 cart_item.ord_qty = qty
                 cart_item.save()
             return JsonResponse({"status":"Item added succesfully"})
+        elif request.method == 'DELETE':
+            prod_id = request.GET['product_id']
+            print(prod_id)
+            obj = get_object_or_404(Cart, cart_product_id=prod_id)
+            obj.delete()
+            return JsonResponse({"status":"Item deleted succesfully"})
+        return JsonResponse({"Err":"Invalid request method"},status=405)
+    return JsonResponse({"Err":"No User logged in"},status=400)
 
 
 
