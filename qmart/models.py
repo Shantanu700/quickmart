@@ -5,9 +5,9 @@ from datetime import date
 # Create your models7 here.
 
 class MyUser(AbstractUser):
-    phone = models.CharField(max_length=10, null=True, unique=True)
+    phone = models.CharField(max_length=10, blank=True, unique=True, default=' ')
     email = models.EmailField(max_length=50, null=False, unique=True)
-    REQUIRED_FIELDS = ['username','first_name','last_name']
+    REQUIRED_FIELDS = ['username','first_name']
     USERNAME_FIELD = "email"
 
 class Category(models.Model):
@@ -16,7 +16,7 @@ class Category(models.Model):
 
 
 class Products(models.Model):
-    prod_name = models.CharField(max_length=100, null=False)
+    prod_name = models.CharField(max_length=255, null=False)
     prod_dsc = models.TextField(max_length=500,null=False)
     prod_price = models.IntegerField(null=False)
     prod_disc = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])

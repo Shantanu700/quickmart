@@ -21,18 +21,19 @@ def register(request):
             if not u_name.isalnum():
                 return JsonResponse({"Err":"Invalid User name, should be in alphabets or digits"}, status=422)
             l_name = data['Lname']
-            if not l_name.isalpha():
-                return JsonResponse({"Err":"Invalid Last name, should be in alphabets"}, status=422)
+            # if not l_name.isalpha():
+            #     return JsonResponse({"Err":"Invalid Last name, should be in alphabets"}, status=422)
             e_mail = data['Email']
             if not bool(re.match(r"[a-zA-Z0-9_\-\.]+[@][a-z]+[\.][a-z]{2,3}",e_mail)):
                 return JsonResponse({"Err":"Invalid Email, should in the form abc@xyz.com"},status=422)
             mobile = data['Mobile']
-            if not (mobile.isnumeric() and len(mobile) == 10) or (not mobile):
+            print(bool(mobile))
+            if not ((mobile.isnumeric() and len(mobile) == 10) or (not mobile)):
                 return JsonResponse({"Err":"Invalid Phone, shoud be of 10 digits and numeric"},status=422)
             passwd_1 = data['Passwd1']
             passwd_2 = data['Passwd2']
             if not bool(re.match(r"^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,16}$",passwd_1)):
-                return JsonResponse({"Err":"Weak Password, should include an upper case, a number and an special Symbol"},status=400)
+                return JsonResponse({"Err":"Weak Password, should include an upper case, a number, an special Symbol and should be of length between 8 to 16"},status=400)
             if not passwd_1 == passwd_2:
                 return JsonResponse({"Err":"passwords do not match"}, status=409)
             new_user = MyUser.objects.create_user(u_name, e_mail, passwd_1,first_name=first_name,last_name = l_name,phone = mobile)
@@ -89,7 +90,8 @@ def show_prod(request):
                       "available_qty":pro.prod_avl_qty,
                       "main_category":pro.pro_cat.main_cat,
                       "sub_category":pro.pro_cat.sub_cat,
-                      "images":[img.image.name for img in Images.objects.filter(img_pro_id=pro.id)]
+                      "thumbnail":Images.objects.get(image__startswith=f'product_{pro.id}/prod_{pro.id}_img1').image.name,
+                      "images":[img.image.name for img in Images.objects.filter(img_pro_id=pro.id).exclude(image__startswith=f'product_{pro.id}/prod_{pro.id}_img1')]
                       } for pro in Products.objects.all())
         return JsonResponse(prods, safe=False)
     
@@ -114,9 +116,7 @@ def magnage_pro(request):
                     f.name = f"prod_{id}_img{count}."+ext
                     img = Images(id=None,image=f,img_pro=prod)
                     img.save()
-            elif request.method == 'PUT':
-                
-                return JsonResponse({"status":"Added Product Succesfully"},status=200 )
+                return JsonResponse({"status":"Added Product Succesfully"},status=200)
             return JsonResponse({"Err":"Invalid request method"},status=405)
         return JsonResponse({"Err":"Unautherized access"},status=401)
     return JsonResponse({"Err":"No User logged in"},status=400)
@@ -126,15 +126,17 @@ def manage_cart(request):
     if request.user.is_authenticated:
         if request.method == 'POST':
             data = json.loads(request.body)
-            prod_id = int(data['product_id'])
-            qty = int(data['quantity'])
-            cart_item, created = Cart.objects.get_or_create(cart_product_id=prod_id,cart_customer=request.user, defaults={'ord_qty':qty})
-            print(created)
-            print(Products.objects.filter())
-            if not created:
-                cart_item.ord_qty = qty
-                cart_item.save()
-            return JsonResponse({"status":"Item added succesfully"})
+            # print(data)
+            for item in data:
+                prod_id = int(item['product_id'])
+                qty = int(item['quantity'])
+                cart_item, created = Cart.objects.get_or_create(cart_product_id=prod_id,cart_customer=request.user, defaults={'ord_qty':qty})
+                print(created)
+                print(Products.objects.filter())
+                if not created:
+                    cart_item.ord_qty = qty
+                    cart_item.save()
+                return JsonResponse({"status":"Item added succesfully"})
         elif request.method == 'DELETE':
             prod_id = request.GET['product_id']
             print(prod_id)
