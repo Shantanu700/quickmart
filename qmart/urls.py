@@ -13,9 +13,8 @@ urlpatterns = [
     path("products/", views.show_prod, name="show_products"),
     path("qmart_admin/", views.magnage_pro, name="manage products"),
     path("info/", views.info, name="Info"),
-    path("add_to_cart/", views.manage_cart, name="add_to_cart")
+    path("add_to_cart/", views.manage_cart, name="add_to_cart"),
+    path("test/", views.test, name="test"),
     
-
-
 
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

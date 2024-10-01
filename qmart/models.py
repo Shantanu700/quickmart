@@ -5,8 +5,9 @@ from datetime import date
 # Create your models7 here.
 
 class MyUser(AbstractUser):
-    phone = models.CharField(max_length=10, blank=True, unique=True, default=' ')
+    phone = models.CharField(max_length=10, blank=True, unique=False)
     email = models.EmailField(max_length=50, null=False, unique=True)
+    username = models.CharField(max_length=20, blank=True,unique=False, default=' ')
     REQUIRED_FIELDS = ['username','first_name']
     USERNAME_FIELD = "email"
 
@@ -21,7 +22,7 @@ class Products(models.Model):
     prod_price = models.IntegerField(null=False)
     prod_disc = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])
     prod_avl_qty = models.IntegerField()
-    pro_cat = models.ForeignKey(Category, on_delete=models.RESTRICT, default=1)
+    pro_cat = models.ForeignKey(Category, on_delete=models.RESTRICT)
 
 
 class Orders(models.Model):
@@ -29,13 +30,14 @@ class Orders(models.Model):
     customer = models.ForeignKey(MyUser, on_delete=models.RESTRICT)
     odr_date  = models.DateField(default=date.today)
     ship_addr = models.TextField(max_length=510)
-    status = models.CharField(max_length=2,default="OC",choices={
-        "OC":"Order Confirmed",
+    ord_qty = models.IntegerField(default=1)
+    status = models.CharField(max_length=2,default="OP",choices={
+        "OP":"Order Placed",
         "SH":"Shipped",
         "OD":"Out for Dilevery",
         "DI":"Dilevered"
     })
-    mode_of_payment = models.CharField(max_length=3,default="DC",choices={
+    mode_of_payment = models.CharField(max_length=3,choices={
         "DBC":"Debit Card",
         "CRC":"Credit Card",
         "UPI":"Online",
