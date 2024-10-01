@@ -35,10 +35,10 @@ def register(request):
             passwd_2 = data['Passwd2']
             if not bool(re.match(r"^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,16}$",passwd_1)):
                 return JsonResponse({"Err":"Weak Password, should include an upper case, a number, an special Symbol and should be of length between 8 to 16"},status=400)
-            if not passwd_1 == passwd_2:
+            if passwd_1 != passwd_2:
                 return JsonResponse({"Err":"passwords do not match"}, status=409)
             new_user = MyUser.objects.create_user(u_name, e_mail, passwd_1,first_name=first_name,last_name = l_name,phone = mobile)
-            new_user.save()
+            # new_user.save()
             return JsonResponse({'status': 'success', 'f_name': first_name, 'e_mail': e_mail, 'l_name': l_name, },status=201)
         except IntegrityError as I:
             return JsonResponse({"Err":I.args[1]}, status=409)
