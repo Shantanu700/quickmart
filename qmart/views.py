@@ -3,7 +3,8 @@ from django.db.models import F
 from django.http import JsonResponse
 import json
 import re
-
+import magic
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from qmart.models import *
 from django.contrib.auth import authenticate, login, logout
@@ -13,50 +14,57 @@ from django.contrib.auth import authenticate, login, logout
 
 def register(request):
     if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            first_name = data['Fname']
-            if not first_name.isalpha():
-                return JsonResponse({"Err":"Invalid First name, should be in alphabets"}, status=422)
-            u_name = data['Uname']
-            # if not u_name.isalnum():
-            #     return JsonResponse({"Err":"Invalid User name, should be in alphabets or digits"}, status=422)
-            l_name = data['Lname']
-            # if not l_name.isalpha():
-            #     return JsonResponse({"Err":"Invalid Last name, should be in alphabets"}, status=422)
-            e_mail = data['Email']
-            if not bool(re.match(r"[a-zA-Z0-9_\-\.]+[@][a-z]+[\.][a-z]{2,3}",e_mail)):
-                return JsonResponse({"Err":"Invalid Email, should in the form abc@xyz.com"},status=422)
-            mobile = data['Mobile']
-            print(bool(mobile))
-            if not ((mobile.isnumeric() and len(mobile) == 10) or (not mobile)):
-                return JsonResponse({"Err":"Invalid Phone, shoud be of 10 digits and numeric"},status=422)
-            passwd_1 = data['Passwd1']
-            passwd_2 = data['Passwd2']
-            if not bool(re.match(r"^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,16}$",passwd_1)):
-                return JsonResponse({"Err":"Weak Password, should include an upper case, a number, an special Symbol and should be of length between 8 to 16"},status=400)
+        data = json.loads(request.body)
+        first_name = data.get('Fname')
+        if not first_name.isalpha():
+            return JsonResponse({"Err":"Invalid First name, should be in alphabets"}, status=422)
+        u_name = data.get('Uname')
+        # if not u_name.isalnum():
+        #     return JsonResponse({"Err":"Invalid User name, should be in alphabets or digits"}, status=422)
+        l_name = data.get('Lname')
+        # if not l_name.isalpha():
+        #     return JsonResponse({"Err":"Invalid Last name, should be in alphabets"}, status=422)
+        e_mail = data.get('Email')
+        if not e_mail:
+            return JsonResponse({"Err":"Email is required"},status=422)
+        if not bool(re.match(r"[a-zA-Z0-9_\-\.]+[@][a-z]+[\.][a-z]{2,3}",e_mail)):
+            return JsonResponse({"Err":"Invalid Email, should in the form abc@xyz.com"},status=422)
+        mobile = data.get('Mobile')
+        print(bool(mobile))
+        if not ((mobile.isnumeric() and len(mobile) == 10) or (not mobile)):
+            return JsonResponse({"Err":"Invalid Phone, shoud be of 10 digits and numeric"},status=422)
+        passwd_1 = data.get('Passwd1')
+        passwd_2 = data.get('Passwd2')
+        if not (passwd_1 and passwd_2):
+            return JsonResponse({"Err":"Both passwords are required"},status=422)
+        if not bool(re.match(r"^(?=.*[A-Z])(?=.*[!@#$&*])(?=.*[0-9])(?=.*[a-z]).{8,16}$",passwd_1)):
+            return JsonResponse({"Err":"Weak Password, should include an upper case, a number, an special Symbol and should be of length between 8 to 16"},status=400)
+        if all([first_name,e_mail,passwd_1,passwd_2]):
             if passwd_1 != passwd_2:
                 return JsonResponse({"Err":"passwords do not match"}, status=409)
+            if MyUser.objects.filter(email=e_mail).exists():
+                return JsonResponse({"Err":"User already exists with this email"},status=409)
             new_user = MyUser.objects.create_user(u_name, e_mail, passwd_1,first_name=first_name,last_name = l_name,phone = mobile)
-            # new_user.save()
-            return JsonResponse({'status': 'success', 'f_name': first_name, 'e_mail': e_mail, 'l_name': l_name, },status=201)
-        except IntegrityError as I:
-            return JsonResponse({"Err":I.args[1]}, status=409)
+        # new_user.save()
+            return JsonResponse({ 'f_name': first_name, 'e_mail': e_mail, 'l_name': l_name, },status=201)
+        return JsonResponse({'Err':"First name, Email, Passwords are required"},status=422)
     return JsonResponse({"Err":"Invalid request method"},status=405) 
 
 def signin(request):
     if request.method == 'POST':
         data = json.loads(request.body)
         print(data)
-        e_mail = data['Email']
-        passwd = data['Passwd']
-        if e_mail in [user.email for user in MyUser.objects.all()]:
-            User = authenticate(email=e_mail,password=passwd)
-            if User is not None:
-                login(request,User)
-                return JsonResponse({"status":"Logged in Successfully", "is_admin": User.is_superuser},status=200 )
-            return JsonResponse({"Err":"Password entered is incorrect"},status=400)
-        return JsonResponse({"Err":"No user with these credentials"},status=400)
+        e_mail = data.get('Email')
+        passwd = data.get('Passwd')
+        if e_mail and passwd:
+            if MyUser.objects.filter(email=e_mail).exists():
+                User = authenticate(email=e_mail,password=passwd)
+                if User is not None:
+                    login(request,User)
+                    return JsonResponse({"status":"Logged in Successfully", "is_admin": User.is_superuser},status=200 )
+                return JsonResponse({"Err":"Password entered is incorrect"},status=400)
+            return JsonResponse({"Err":"No user with these credentials"},status=400)
+        return JsonResponse({'Err':'Email and Password are required'},status=422)
     return JsonResponse({"Err":"Invalid request method"},status=405)
 
 def info(request):
@@ -73,13 +81,10 @@ def info(request):
 
 def signout(request):
     if request.method == 'POST':
-        if request.user is not None:
-            if request.user.is_authenticated:
-                print((request.user))
-                logout(request)
-                return JsonResponse({"status":"Logged out Successfully"},status=200 )
-            return JsonResponse({"Err":"No any User was autherized"},status=400)
-        return JsonResponse({"Err":"No any User"},status=400)
+        if request.user.is_authenticated:
+            logout(request)
+            return JsonResponse({"status":"Logged out Successfully"},status=200 )
+        return JsonResponse({"Err":"No any User was autherized"},status=400)
     return JsonResponse({"Err":"Invalid request method"},status=405)
 
 def show_prod(request):    
@@ -106,17 +111,33 @@ def magnage_pro(request):
         if request.user.is_authenticated:
             if request.user.is_superuser:
                 data = request.POST
-                name =  data['title']
-                desc = data['description']
-                price = data['price']
-                discount = data['discount']
-                cat, created = Category.objects.get_or_create(sub_cat=data['sub_category'],main_cat=data['category'])
-                avl_qty = data['avl_qty']
-                prod = Products(prod_name=name,prod_dsc=desc,prod_price=price, prod_disc=discount,prod_avl_qty=avl_qty,pro_cat=cat)
-                prod.save()
+                name =  data.get('title')
+                desc = data.get('discription')
+                price = data.get('price')
+                discount = data.get('discount')
+                sub_category = data.get('sub_category')
+                main_category = data.get('category')
+                avl_qty = data.get('avl_qty')
+                if all([name,desc,price,sub_category,main_category,avl_qty]):
+                    cat = Category.objects.get_or_create(sub_cat=sub_category,main_cat=main_category)
+                    prod = Products(prod_name=name,prod_dsc=desc,prod_price=price, prod_disc=discount,prod_avl_qty=avl_qty,pro_cat=cat)
+                    prod.save()
+                else:
+                    return JsonResponse({'Err':'Title, discription, price, sub-category,main-category are required'},status=422)
                 id = prod.id
                 for count,f in enumerate(request.FILES.getlist('file'),1):
                     ext = f.name.split('.')[-1]
+                    content_type = f.content_type
+                    mime_type = magic.from_buffer(f.read(1024), mime=True)
+                    size = f.size
+                    if size > settings.MAX_IMG_SIZE:
+                        return JsonResponse({'Err':f'size {size} larger than 1 MB'})
+                    if content_type not in settings.ALLOWED_IMG_TYPES.values():
+                        return JsonResponse({'Err':'invalid image content-type'})
+                    if ext not in settings.ALLOWED_IMG_TYPES.keys():
+                        return JsonResponse({'Err':'invalid image extension'})
+                    if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
+                        return JsonResponse({'Err':'invalid image mime-type'})
                     f.name = f"prod_{id}_img{count}."+ext
                     img = Images(id=None,image=f,img_pro=prod)
                     img.save()
@@ -137,10 +158,11 @@ def manage_cart(request):
     elif request.method == 'POST':
         if request.user.is_authenticated:
             data = json.loads(request.body)
-            print(data)
             for item in data:
-                prod_id = int(item['product'])
-                qty = int(item['qt'])
+                prod_id = item.get('product')
+                qty = item.get('qt')
+                if not (prod_id and qty):
+                    return JsonResponse({'Err':'Product ID and Quantity are required'},status=422)
                 cart_item, created = Cart.objects.get_or_create(cart_product_id=prod_id,cart_customer=request.user, defaults={'ord_qty':qty})
                 print(created)
                 # print(Products.objects.filter())
@@ -154,8 +176,10 @@ def manage_cart(request):
             data = json.loads(request.body)
             Cart.objects.filter(cart_customer=request.user).delete()
             for item in data:
-                prod_id = int(item['product'])
-                qty = int(item['qt'])
+                prod_id = item.get('product')
+                qty = item.get('qt')
+                if not (prod_id and qty):
+                    return JsonResponse({'Err':'Product ID and Quantity are required'},status=422)
                 cart_item = Cart.objects.create(cart_product_id=prod_id,cart_customer=request.user, ord_qty=qty)
             return JsonResponse({"status":"Updated Cart Succesfully"},status=200)
         return JsonResponse({"Err":"No User logged in"},status=400)
@@ -167,12 +191,89 @@ def manage_cart(request):
         #     return JsonResponse({"status":"Item deleted succesfully"})
     return JsonResponse({"Err":"Invalid request method"},status=405)
 
+def orders(request):
+    if request.method == 'POST':
+        if request.user.is_authenticated:
+            data = json.loads(request.body)
+            print(data)
+            prods = data.get('product')
+            customer_addr = data.get('address')
+            mop = data.get('mode')
+            c_code = data.get('coupon_code')
+            if not all([prods, customer_addr, mop]):
+                return JsonResponse({'Err':'Products, customer, Mode of Payment are required'},status=422)
+            for prod in prods:
+                prod_id = prod.get('id')
+                prod_qt = prod.get('qty')
+                if not (prod_id and prod_qt):
+                    return JsonResponse({'Err':'Product ID and quantity are required'},status=422)
+                
+                order = Orders.objects.create(product_id=prod_id,customer=request.user,ship_addr=customer_addr,ord_qty=prod_qt,mode_of_payment=mop)
+            # qty = data['qt']
+            # ord_status = data['status']
+            
+            if c_code:
+                if not used_coupons.objects.filter(coupon__code=c_code,cstmr_id=request.user).exists() and Coupons.objects.get(code=c_code).count:
+                    print("code applied")
+                    coupon = Coupons.objects.get(code=c_code)
+                    coupon.count = F("count") - 1
+                    coupon.save()
+                    usd_code = used_coupons.objects.create(coupon=coupon,cstmr_id=request.user)
+            else:
+                print("code not applied")
+            return JsonResponse({'status':'Order palced succesfully'})
+
+
+
+def manage_coupons(request):
+    if request.method == "POST":
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                data = json.loads(request.body)
+                c_code = data.get('code')
+                c_count = data.get('count')
+                c_disc = data.get('discount')
+                if all([c_code,c_count,c_disc]):
+                    if Coupons.objects.filter(code=c_code).exists():
+                        return JsonResponse({"Err":"Coupon already exist"})
+                    coupon = Coupons.objects.create(code=c_code,count=c_count,discount=c_disc)
+                else:
+                    return JsonResponse({"Err":"Code, count, discount are required"},status=422)
+                return JsonResponse({"status":"Added Coupon"})
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+    elif request.method == 'GET':
+        if request.user.is_authenticated:
+            c_code = request.GET.get('coupon')
+            if not c_code:
+                return JsonResponse({'Err':'No any coupon code'},status=404)
+            if used_coupons.objects.filter(coupon__code=c_code,cstmr_id=request.user).exists():
+                return JsonResponse({'Err':'coupon already applied'},status=409)
+            if Coupons.objects.filter(code=c_code).exists():
+                discount = Coupons.objects.get(code=c_code).discount
+                return JsonResponse({'discount':discount})
+            return JsonResponse({"Err":'Invalid coupon'},status=404)
+            #     return JsonResponse({'recieved':"coupon"})
+            # else:
+            #     return JsonResponse({'not recieved':"coupon"})
+
 
 
 def test(request):
-    if request.method == 'GET':
+    if request.method == 'POST':
         if request.user.is_authenticated:
-            prod = Products.objects.all().values()
+            # prod = Products.objects.all().values()
+            file = request.FILES.get('file')
+            print(type(file))
+            if file:
+                content_type = file.content_type
+                mime_type = magic.from_buffer(file.read(1024), mime=True)
+                size = file.size
+                ext = file.name.split('.')[-1]
+                print(ext,size)
+            else:
+                print('NO IMAGE FOUND')
+                # if size <= settings.MAX_IMG_SIZE and content_type in settings.ALLOWED_IMG_TYPES.keys() and 
             # for f in request.FILES.getlist('file'):
             #     print(f)
             #     img = Images(id=None,image=f,img_pro=prod)
@@ -182,4 +283,4 @@ def test(request):
             # print(img1.image)
             # img.save()
             # print(request.POST['name'])
-            return JsonResponse(list(prod), safe=False)
+            return JsonResponse({"test":"This api is for testing"}, safe=False)

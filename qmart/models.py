@@ -8,7 +8,7 @@ class MyUser(AbstractUser):
     phone = models.CharField(max_length=10, blank=True, unique=False)
     email = models.EmailField(max_length=50, null=False, unique=True)
     username = models.CharField(max_length=20, blank=True,unique=False, default=' ')
-    REQUIRED_FIELDS = ['username','first_name']
+    REQUIRED_FIELDS = ['first_name']
     USERNAME_FIELD = "email"
 
 class Category(models.Model):
@@ -38,11 +38,10 @@ class Orders(models.Model):
         "DI":"Dilevered"
     })
     mode_of_payment = models.CharField(max_length=3,choices={
-        "DBC":"Debit Card",
+        "PPL":"Debit Card",
         "CRC":"Credit Card",
         "UPI":"Online",
         "COD":"Cash on Dilevery",
-        "NBI":"Net banking"
     })
 
 class Cart(models.Model):
@@ -60,3 +59,12 @@ class Images(models.Model):
         return f'product_{pro_id}//{filename}'
     img_pro = models.ForeignKey(Products, on_delete=models.RESTRICT)
     image = models.ImageField(max_length=500,upload_to=get_image_path)
+
+class Coupons(models.Model):
+    code = models.CharField(max_length=5)
+    count = models.IntegerField()
+    discount = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])
+
+class used_coupons(models.Model):
+    cstmr_id = models.ForeignKey(MyUser,on_delete=models.RESTRICT)
+    coupon = models.ForeignKey(Coupons, on_delete=models.CASCADE)

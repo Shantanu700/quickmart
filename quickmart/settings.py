@@ -40,6 +40,16 @@ SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 
 
+ALLOWED_IMG_TYPES = {
+    'jpeg': 'image/jpeg',
+    'jpg': 'image/jpeg',
+    'png': 'image/png'
+}
+
+MAX_IMG_SIZE = 1048576
+
+
+
 # Application definition
 
 INSTALLED_APPS = [
