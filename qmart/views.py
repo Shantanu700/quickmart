@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from django.db.models import F
+from django.db.models import F,Q
 from django.http import JsonResponse
 import json
 import re
@@ -105,7 +105,7 @@ def show_prod(request):
     
     
 
-def magnage_pro(request):
+def manage_pro(request):
     # if request.user is not None:
     if request.method == 'POST':
         if request.user.is_authenticated:
@@ -115,6 +115,9 @@ def magnage_pro(request):
                 desc = data.get('discription')
                 price = data.get('price')
                 discount = data.get('discount')
+                if discount:
+                    if discount > 95:
+                        return JsonResponse({"Err":"Invalid Discount"},status=422)
                 sub_category = data.get('sub_category')
                 main_category = data.get('category')
                 avl_qty = data.get('avl_qty')
@@ -144,6 +147,54 @@ def magnage_pro(request):
                 return JsonResponse({"status":"Added Product Succesfully"},status=200)
             return JsonResponse({"Err":"Unautherized access"},status=401)
         return JsonResponse({"Err":"No User logged in"},status=400)
+    if request.method == 'PUT':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                data = json.loads(request.body)
+                prod_id = data.get('id')
+                if not prod_id:
+                    return JsonResponse({"Err":"Product ID is required"},status=422)
+                name =  data.get('title')
+                desc = data.get('description')
+                price = data.get('price')
+                discount = data.get('discount')
+                if discount:
+                    if discount > 95:
+                        return JsonResponse({"Err":"Invalid Discount"},status=422)
+                avl_qty = data.get('avl_qty')
+                sub_category = data.get('sub_category')
+                main_category = data.get('category')
+                product = Products.objects.filter(id=prod_id)
+                # cat_id = Category.objects.get(sub_cat=sub_category,main_cat=main_category).id
+                if name:
+                    product.update(prod_name=name)
+                if desc:
+                    product.update(prod_dsc=desc)
+                if price:
+                    product.update(prod_price=price)
+                if discount is not None:
+                    product.update(prod_disc=discount)
+                if avl_qty:
+                    product.update(prod_avl_qty=avl_qty)
+                if sub_category and main_category:
+                    cat_id = get_object_or_404(Category, sub_cat=sub_category, main_cat=main_category).id
+                    product.update(pro_cat_id=cat_id)
+                return JsonResponse({"status":"Updated"})
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+
+    if request.method == 'DELETE':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                data = json.loads(request.body)
+                del_id = data.get('id')
+                
+                return JsonResponse({"Dleted":f"product number {del_id}"})
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+
+
+
     return JsonResponse({"Err":"Invalid request method"},status=405)
 
 
@@ -183,12 +234,12 @@ def manage_cart(request):
                 cart_item = Cart.objects.create(cart_product_id=prod_id,cart_customer=request.user, ord_qty=qty)
             return JsonResponse({"status":"Updated Cart Succesfully"},status=200)
         return JsonResponse({"Err":"No User logged in"},status=400)
-        # elif request.method == 'DELETE':
-        #     prod_id = request.GET['product_id']
-        #     print(prod_id)
-        #     obj = get_object_or_404(Cart, cart_product_id=prod_id)
-        #     obj.delete()
-        #     return JsonResponse({"status":"Item deleted succesfully"})
+    # elif request.method == 'DELETE':
+    #     prod_id = request.GET.get('product_id')
+    #     print(prod_id)
+    #     obj = get_object_or_404(Cart, cart_product_id=prod_id)
+    #     obj.delete()
+    #     return JsonResponse({"status":"Item deleted succesfully"})
     return JsonResponse({"Err":"Invalid request method"},status=405)
 
 def orders(request):
@@ -200,6 +251,7 @@ def orders(request):
             customer_addr = data.get('address')
             mop = data.get('mode')
             c_code = data.get('coupon_code')
+            print(c_code)
             if not all([prods, customer_addr, mop]):
                 return JsonResponse({'Err':'Products, customer, Mode of Payment are required'},status=422)
             for prod in prods:
@@ -207,11 +259,15 @@ def orders(request):
                 prod_qt = prod.get('qty')
                 if not (prod_id and prod_qt):
                     return JsonResponse({'Err':'Product ID and quantity are required'},status=422)
-                
+                product = Products.objects.get(pk=prod_id)
+                if product.prod_avl_qty < prod_qt:
+                    return JsonResponse({"Err":"Out of Stock"},status=400)
+                product.prod_avl_qty = F('prod_avl_qty') - prod_qt
+                product.save()
                 order = Orders.objects.create(product_id=prod_id,customer=request.user,ship_addr=customer_addr,ord_qty=prod_qt,mode_of_payment=mop)
+                
             # qty = data['qt']
             # ord_status = data['status']
-            
             if c_code:
                 if not used_coupons.objects.filter(coupon__code=c_code,cstmr_id=request.user).exists() and Coupons.objects.get(code=c_code).count:
                     print("code applied")
@@ -222,9 +278,46 @@ def orders(request):
             else:
                 print("code not applied")
             return JsonResponse({'status':'Order palced succesfully'})
+        return JsonResponse({"Err":"No User logged in"},status=400)
+    if request.method == 'GET':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                orders = [{"title":order.product.prod_name,
+                        "id":order.id,
+                       "price":order.product.prod_price,
+                       "qty":order.ord_qty,
+                       "status":order.get_status_display(),
+                       "status_code":order.status,
+                       "discount":order.product.prod_disc,
+                       "thumbnail":Images.objects.get(image__startswith=f'product_{order.product.id}/prod_{order.product.id}_img1').image.name} for order in Orders.objects.all()]
+                return JsonResponse(list(reversed(orders)),safe=False)    
+            # orders = Orders.objects.filter(customer=request.user).values(title=F('product__prod_name'),price=F('product__prod_price'),qty=F('ord_qty'),id=F('product__id'))
+            # images = Images.objects.filter(image__startswith=f'product_{orders[0][id]}/prod_{orders[0][id]}_img1').values()
+            orders = [{"title":order.product.prod_name,
+                       "price":order.product.prod_price,
+                       "qty":order.ord_qty,
+                       "status":order.get_status_display(),
+                       "discount":order.product.prod_disc,
+                       "thumbnail":Images.objects.get(image__startswith=f'product_{order.product.id}/prod_{order.product.id}_img1').image.name} for order in Orders.objects.filter(customer=request.user)]
+            return JsonResponse(list(orders),safe=False)
+        return JsonResponse({"Err":"No User logged in"},status=400)
 
-
-
+    if request.method == 'PUT':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                data = json.loads(request.body)
+                status_ = data.get('status')
+                ord_id = data.get('id')
+                if status_:
+                    order_to_update = Orders.objects.get(id=ord_id)
+                    order_to_update.status = list(Orders.choices_of_status.keys())[list(Orders.choices_of_status.values()).index(status_)]
+                    order_to_update.save()
+                    return JsonResponse({"status":"Updated Successfully"})
+                return JsonResponse({"Err":"No status Found"},status=404)
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+    return JsonResponse({"Err":"Invalid request method"},status=405)
+    
 def manage_coupons(request):
     if request.method == "POST":
         if request.user.is_authenticated:
@@ -248,8 +341,8 @@ def manage_coupons(request):
             if not c_code:
                 return JsonResponse({'Err':'No any coupon code'},status=404)
             if used_coupons.objects.filter(coupon__code=c_code,cstmr_id=request.user).exists():
-                return JsonResponse({'Err':'coupon already applied'},status=409)
-            if Coupons.objects.filter(code=c_code).exists():
+                return JsonResponse({'Err':'coupon already used'},status=409)
+            if Coupons.objects.filter(code=c_code).exists() and Coupons.objects.get(code=c_code).count:
                 discount = Coupons.objects.get(code=c_code).discount
                 return JsonResponse({'discount':discount})
             return JsonResponse({"Err":'Invalid coupon'},status=404)

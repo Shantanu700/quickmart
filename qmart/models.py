@@ -24,6 +24,10 @@ class Products(models.Model):
     prod_avl_qty = models.IntegerField()
     pro_cat = models.ForeignKey(Category, on_delete=models.RESTRICT)
 
+class Coupons(models.Model):
+    code = models.CharField(max_length=5)
+    count = models.IntegerField()
+    discount = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])
 
 class Orders(models.Model):
     product = models.ForeignKey(Products,on_delete=models.RESTRICT)
@@ -31,18 +35,25 @@ class Orders(models.Model):
     odr_date  = models.DateField(default=date.today)
     ship_addr = models.TextField(max_length=510)
     ord_qty = models.IntegerField(default=1)
-    status = models.CharField(max_length=2,default="OP",choices={
-        "OP":"Order Placed",
-        "SH":"Shipped",
-        "OD":"Out for Dilevery",
-        "DI":"Dilevered"
-    })
-    mode_of_payment = models.CharField(max_length=3,choices={
+    ord_id = models.IntegerField(default=1)
+    coupon_used = models.ForeignKey(Coupons,on_delete=models.RESTRICT,null=True)
+    is_deleted = models.BooleanField(default=0)
+    choices_of_mode = {
         "PPL":"Debit Card",
         "CRC":"Credit Card",
         "UPI":"Online",
         "COD":"Cash on Dilevery",
-    })
+    }
+
+    choices_of_status = {
+        "OP":"Order Placed",
+        "SH":"Shipped",
+        "OD":"Out for Dilevery",
+        "DI":"Delivered",
+    }
+    
+    status = models.CharField(max_length=2,default="OP",choices=choices_of_status)
+    mode_of_payment = models.CharField(max_length=3,choices=choices_of_mode)
 
 class Cart(models.Model):
     cart_product = models.ForeignKey(Products, on_delete=models.RESTRICT)
@@ -57,13 +68,9 @@ class Images(models.Model):
         # print(str(filename))
         # print(f'product_{pro_id}//{filename}')
         return f'product_{pro_id}//{filename}'
-    img_pro = models.ForeignKey(Products, on_delete=models.RESTRICT)
+    img_pro = models.ForeignKey(Products, on_delete=models.CASCADE)
     image = models.ImageField(max_length=500,upload_to=get_image_path)
 
-class Coupons(models.Model):
-    code = models.CharField(max_length=5)
-    count = models.IntegerField()
-    discount = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])
 
 class used_coupons(models.Model):
     cstmr_id = models.ForeignKey(MyUser,on_delete=models.RESTRICT)
