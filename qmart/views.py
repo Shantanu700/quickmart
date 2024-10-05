@@ -8,6 +8,8 @@ from django.conf import settings
 from django.shortcuts import get_object_or_404
 from qmart.models import *
 from django.contrib.auth import authenticate, login, logout
+import os
+
 
 # Create your views here.
 
@@ -30,7 +32,6 @@ def register(request):
         if not bool(re.match(r"[a-zA-Z0-9_\-\.]+[@][a-z]+[\.][a-z]{2,3}",e_mail)):
             return JsonResponse({"Err":"Invalid Email, should in the form abc@xyz.com"},status=422)
         mobile = data.get('Mobile')
-        print(bool(mobile))
         if not ((mobile.isnumeric() and len(mobile) == 10) or (not mobile)):
             return JsonResponse({"Err":"Invalid Phone, shoud be of 10 digits and numeric"},status=422)
         passwd_1 = data.get('Passwd1')
@@ -53,7 +54,6 @@ def register(request):
 def signin(request):
     if request.method == 'POST':
         data = json.loads(request.body)
-        print(data)
         e_mail = data.get('Email')
         passwd = data.get('Passwd')
         if e_mail and passwd:
@@ -99,52 +99,80 @@ def show_prod(request):
                       "sub_category":pro.pro_cat.sub_cat,
                       "thumbnail":Images.objects.get(image__startswith=f'product_{pro.id}/prod_{pro.id}_img1').image.name,
                       "images":[img.image.name for img in Images.objects.filter(img_pro_id=pro.id).exclude(image__startswith=f'product_{pro.id}/prod_{pro.id}_img1')]
-                      } for pro in Products.objects.all())
+                      } for pro in Products.objects.filter(is_deleted=False))
         return JsonResponse(prods, safe=False)
     return JsonResponse({"Err":"Invalid request method"},status=405)
     
     
 
 def manage_pro(request):
-    # if request.user is not None:
     if request.method == 'POST':
         if request.user.is_authenticated:
             if request.user.is_superuser:
-                data = request.POST
-                name =  data.get('title')
-                desc = data.get('discription')
-                price = data.get('price')
-                discount = data.get('discount')
-                if discount:
-                    if discount > 95:
-                        return JsonResponse({"Err":"Invalid Discount"},status=422)
-                sub_category = data.get('sub_category')
-                main_category = data.get('category')
-                avl_qty = data.get('avl_qty')
-                if all([name,desc,price,sub_category,main_category,avl_qty]):
-                    cat = Category.objects.get_or_create(sub_cat=sub_category,main_cat=main_category)
-                    prod = Products(prod_name=name,prod_dsc=desc,prod_price=price, prod_disc=discount,prod_avl_qty=avl_qty,pro_cat=cat)
-                    prod.save()
-                else:
-                    return JsonResponse({'Err':'Title, discription, price, sub-category,main-category are required'},status=422)
-                id = prod.id
-                for count,f in enumerate(request.FILES.getlist('file'),1):
-                    ext = f.name.split('.')[-1]
-                    content_type = f.content_type
-                    mime_type = magic.from_buffer(f.read(1024), mime=True)
-                    size = f.size
-                    if size > settings.MAX_IMG_SIZE:
-                        return JsonResponse({'Err':f'size {size} larger than 1 MB'})
-                    if content_type not in settings.ALLOWED_IMG_TYPES.values():
-                        return JsonResponse({'Err':'invalid image content-type'})
-                    if ext not in settings.ALLOWED_IMG_TYPES.keys():
-                        return JsonResponse({'Err':'invalid image extension'})
-                    if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
-                        return JsonResponse({'Err':'invalid image mime-type'})
-                    f.name = f"prod_{id}_img{count}."+ext
-                    img = Images(id=None,image=f,img_pro=prod)
-                    img.save()
-                return JsonResponse({"status":"Added Product Succesfully"},status=200)
+                if request.FILES.getlist('file'):
+                    images_list = request.FILES.getlist('file')
+                    if len(images_list) > 8:
+                        return JsonResponse({'Err':"You can't upload more than 8 images"}, status=422)
+                    for count,f in enumerate(images_list,1):
+                        print(f)
+                        ext = f.name.split('.')[-1]
+                        print(ext)
+                        content_type = f.content_type
+                        mime_type = magic.from_buffer(f.read(1024), mime=True)
+                        size = f.size
+                        if size > settings.MAX_IMG_SIZE:
+                            return JsonResponse({'Err':f'size {size} larger than 1 MB'},status=422)
+                        if content_type not in settings.ALLOWED_IMG_TYPES.values():
+                            return JsonResponse({'Err':'invalid image content-type'},status=422)
+                        if ext not in settings.ALLOWED_IMG_TYPES.keys():
+                            return JsonResponse({'Err':'invalid image extension'},status=422)
+                        if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
+                            return JsonResponse({'Err':'invalid image mime-type'},status=422)
+                    data = request.POST
+                    # print(data)
+                    name =  data.get('title')
+                    # print(type(name))
+                    desc = data.get('description')
+                    # print(type(desc))
+                    price = data.get('price')
+                    # print(type(price))
+                    discount = data.get('discount')
+                    if discount:
+                        if int(discount) > 95:
+                            return JsonResponse({"Err":"Invalid Discount"},status=422)
+                    sub_category = data.get('sub_category')
+                    # print(type(sub_category))
+                    main_category = data.get('category')
+                    # print(type(main_category))
+                    avl_qty = data.get('avl_qty')
+                    if all([name,desc,price,sub_category,main_category,avl_qty]):
+                        cat, created = Category.objects.get_or_create(sub_cat=sub_category,main_cat=main_category)
+                        print(cat)
+                        prod = Products(prod_name=name,prod_dsc=desc,prod_price=price, prod_disc=discount,prod_avl_qty=avl_qty,pro_cat=cat)
+                        prod.save()
+                    else:
+                        return JsonResponse({'Err':'Title, discription, price, sub-category,main-category, available quantity are required'},status=422)
+                    id = prod.id
+                    for count,f in enumerate(images_list,1):
+                        # print(f)
+                        # ext = f.name.split('.')[-1]
+                        # print(ext)
+                        # content_type = f.content_type
+                        # mime_type = magic.from_buffer(f.read(1024), mime=True)
+                        # size = f.size
+                        # if size > settings.MAX_IMG_SIZE:
+                        #     return JsonResponse({'Err':f'size {size} larger than 1 MB'},status=422)
+                        # if content_type not in settings.ALLOWED_IMG_TYPES.values():
+                        #     return JsonResponse({'Err':'invalid image content-type'},status=422)
+                        # if ext not in settings.ALLOWED_IMG_TYPES.keys():
+                        #     return JsonResponse({'Err':'invalid image extension'},status=422)
+                        # if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
+                        #     return JsonResponse({'Err':'invalid image mime-type'},status=422)
+                        f.name = f"prod_{id}_img{count}."+ext
+                        img = Images(id=None,image=f,img_pro=prod)
+                        img.save()
+                    return JsonResponse({"status":"Added Product Succesfully"},status=200)
+                return JsonResponse({"Err":"Images were not recieved"},status=422)
             return JsonResponse({"Err":"Unautherized access"},status=401)
         return JsonResponse({"Err":"No User logged in"},status=400)
     if request.method == 'PUT':
@@ -188,14 +216,136 @@ def manage_pro(request):
             if request.user.is_superuser:
                 data = json.loads(request.body)
                 del_id = data.get('id')
-                
-                return JsonResponse({"Dleted":f"product number {del_id}"})
+                if del_id:
+                    del_prod = Products.objects.filter(id=del_id).update(is_deleted=True)
+                    return JsonResponse({"status":f"product number {del_id} deleted successfully"})
             return JsonResponse({"Err":"Unautherized access"},status=401)
         return JsonResponse({"Err":"No User logged in"},status=400)
-
-
-
+    # if request.method == 'PATCH':
+    #     data = json.loads(request.body)
+    #     print(data)
+    #     return JsonResponse({'status':'patch request accepted'}
     return JsonResponse({"Err":"Invalid request method"},status=405)
+
+def update_images(request):
+    if request.method == 'GET':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                prod_id = request.GET.get('id')
+                img_list = Images.objects.filter(img_pro__id=prod_id).values('id','image',title=F('img_pro__prod_name'),pro_id=F('img_pro__id'))
+                return JsonResponse(list(img_list),safe=False)
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+    if request.method == 'POST':
+        if request.user.is_authenticated:
+            if request.user.is_superuser:
+                data = request.POST
+                print(data)
+                del_id_list = request.POST.get('img')
+                prod_id = int(request.POST.get('id'))
+                # print(prod_id)
+                print(del_id_list)
+                # print(type(del_id_list.split(',')))
+                # print(del_id_list.split(','))
+                if del_id_list:
+                    num_del_images = del_id_list.count(',')+1
+                else:
+                    num_del_images = 0
+                images_list = request.FILES.getlist('file')
+                num_added_images = len(images_list)
+                if (num_added_images-num_del_images >= 8):
+                    return JsonResponse({"Err":"You can't enter more than 8 images"},status=422)
+                # f = request.FILES.get('file')
+                # print(images_list)
+                if images_list:
+                    for f in images_list:
+                        ext = f.name.split('.')[-1]
+                        content_type = f.content_type
+                        mime_type = magic.from_buffer(f.read(1024), mime=True)
+                        size = f.size
+                        if size > settings.MAX_IMG_SIZE:
+                            return JsonResponse({'Err':f'size {size} larger than 1 MB'},status=422)
+                        if content_type not in settings.ALLOWED_IMG_TYPES.values():
+                            return JsonResponse({'Err':'invalid image content-type'},status=422)
+                        if ext not in settings.ALLOWED_IMG_TYPES.keys():
+                            return JsonResponse({'Err':'invalid image extension'},status=422)
+                        if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
+                            return JsonResponse({'Err':'invalid image mime-type'},status=422)
+                        
+                        if del_id_list:
+                            # print(del_id_list)
+                            del_id_list = del_id_list.split(',')
+                            
+                            img = Images.objects.get(image=del_id_list.pop())
+                            img_name = img.image.name.split('/')[-1]
+                            print(img_name)
+                            # print(del_id_list)
+                            img.image.delete(save=False)
+                            img.image.save(img_name,f)
+                            # print(images_list)
+                            images_list.remove(f)
+                if del_id_list:
+                    if type(del_id_list) == str:                        
+                        del_id_list = del_id_list.split(',')
+                    for del_id in del_id_list:
+                        img = Images.objects.get(image=del_id)
+                        if os.path.exists('Media'+img.image.name):
+                            os.remove('Media'+img.image.name)
+                        img.delete()
+                if images_list:
+                    last_img = Images.objects.filter(img_pro__id=prod_id).latest('id').image.name
+                    last_img_number = int(last_img[-5]) + 1
+                    # print(f.name)
+                    # print(images_list)
+
+                    for count, f in enumerate(images_list,last_img_number):
+                        # print('ho')
+                        ext = f.name.split('.')[-1]
+                        content_type = f.content_type
+                        mime_type = magic.from_buffer(f.read(1024), mime=True)
+                        size = f.size
+                        if size > settings.MAX_IMG_SIZE:
+                            return JsonResponse({'Err':f'size {size} larger than 1 MB'},status=422)
+                        if content_type not in settings.ALLOWED_IMG_TYPES.values():
+                            return JsonResponse({'Err':'invalid image content-type'},status=422)
+                        if ext not in settings.ALLOWED_IMG_TYPES.keys():
+                            return JsonResponse({'Err':'invalid image extension'},status=422)
+                        # if mime_type not in settings.ALLOWED_IMG_TYPES.values() and mime_type != content_type:
+                        #     print(mime_type)
+                        #     return JsonResponse({'Err':'invalid image mime-type'},status=422)
+                        f.name = f"prod_{prod_id}_img{count}."+ext
+                        print(f.name)
+                        img = Images(id=None,image=f,img_pro_id=prod_id)
+                        img.save()
+                        # print(img.image.name)
+                    # f.name = f"prod_{prod_id}_img{last_img_number}"+ext
+                    # print(images_list)
+                    # if del_id_list:
+                    #     print(del_id_list)
+                    #     img = Images.objects.get(id=int(del_id_list.pop()))
+                        # img.delete()
+                        # img.save()
+                            # print(img.image.name)
+                            # print(img.image)
+                            # print(img.image.name)
+                            # print(del_id_list)
+                #     print(f.name)
+                    # images_list[count-1].image.delete(save=False)
+                    # # print(prod_image.image.name)
+                    # images_list[count-1].image.save(f.name,f)
+                    # if os.path.exists(''):
+                    #     pass
+                    # prod_list.update(image=f)
+                #     print(file)
+                # print(prod_list)
+                return JsonResponse({'status':f'recieved id 5'})
+            return JsonResponse({"Err":"Unautherized access"},status=401)
+        return JsonResponse({"Err":"No User logged in"},status=400)
+    return JsonResponse({"Err":"Invalid request method"},status=405)
+
+
+
+
 
 
 def manage_cart(request):
@@ -215,7 +365,6 @@ def manage_cart(request):
                 if not (prod_id and qty):
                     return JsonResponse({'Err':'Product ID and Quantity are required'},status=422)
                 cart_item, created = Cart.objects.get_or_create(cart_product_id=prod_id,cart_customer=request.user, defaults={'ord_qty':qty})
-                print(created)
                 # print(Products.objects.filter())
                 if not created:
                     cart_item.ord_qty = qty
@@ -246,35 +395,40 @@ def orders(request):
     if request.method == 'POST':
         if request.user.is_authenticated:
             data = json.loads(request.body)
-            print(data)
+            # print(data)
             prods = data.get('product')
             customer_addr = data.get('address')
             mop = data.get('mode')
             c_code = data.get('coupon_code')
-            print(c_code)
             if not all([prods, customer_addr, mop]):
                 return JsonResponse({'Err':'Products, customer, Mode of Payment are required'},status=422)
+            last_order_id = Orders.objects.latest('ord_id').ord_id
+            current_order_id = last_order_id + 1
+            print(current_order_id)
             for prod in prods:
                 prod_id = prod.get('id')
                 prod_qt = prod.get('qty')
                 if not (prod_id and prod_qt):
                     return JsonResponse({'Err':'Product ID and quantity are required'},status=422)
-                product = Products.objects.get(pk=prod_id)
+                product = Products.objects.get(id=prod_id)
                 if product.prod_avl_qty < prod_qt:
                     return JsonResponse({"Err":"Out of Stock"},status=400)
                 product.prod_avl_qty = F('prod_avl_qty') - prod_qt
                 product.save()
-                order = Orders.objects.create(product_id=prod_id,customer=request.user,ship_addr=customer_addr,ord_qty=prod_qt,mode_of_payment=mop)
-                
+                order = Orders.objects.create(product_id=prod_id,customer=request.user,ship_addr=customer_addr,ord_qty=prod_qt,mode_of_payment=mop,ord_id=current_order_id)
+                # order.ord_id = last_order_id.ord_id + 1
+                # order.save
             # qty = data['qt']
             # ord_status = data['status']
             if c_code:
                 if not used_coupons.objects.filter(coupon__code=c_code,cstmr_id=request.user).exists() and Coupons.objects.get(code=c_code).count:
-                    print("code applied")
+                    # print("code applied")
                     coupon = Coupons.objects.get(code=c_code)
                     coupon.count = F("count") - 1
                     coupon.save()
                     usd_code = used_coupons.objects.create(coupon=coupon,cstmr_id=request.user)
+                    order.coupon_used = coupon
+                    order.save()
             else:
                 print("code not applied")
             return JsonResponse({'status':'Order palced succesfully'})
@@ -357,13 +511,12 @@ def test(request):
         if request.user.is_authenticated:
             # prod = Products.objects.all().values()
             file = request.FILES.get('file')
-            print(type(file))
             if file:
                 content_type = file.content_type
                 mime_type = magic.from_buffer(file.read(1024), mime=True)
                 size = file.size
                 ext = file.name.split('.')[-1]
-                print(ext,size)
+                # print(ext,size)
             else:
                 print('NO IMAGE FOUND')
                 # if size <= settings.MAX_IMG_SIZE and content_type in settings.ALLOWED_IMG_TYPES.keys() and 

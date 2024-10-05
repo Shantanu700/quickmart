@@ -14,6 +14,7 @@ urlpatterns = [
     path("qmart_admin/", views.manage_pro, name="manage products"),
     path("info/", views.info, name="Info"),
     path("order/", views.orders, name="place_order"),
+    path("update_images/", views.update_images, name="update_images"),
     path("manage_cart/", views.manage_cart, name="add to cart"),
     path("manage_coupons/", views.manage_coupons, name="manage coupons"),
 

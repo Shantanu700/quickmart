@@ -23,6 +23,7 @@ class Products(models.Model):
     prod_disc = models.IntegerField(validators=[MaxValueValidator(100),MinValueValidator(0)])
     prod_avl_qty = models.IntegerField()
     pro_cat = models.ForeignKey(Category, on_delete=models.RESTRICT)
+    is_deleted = models.BooleanField(default=0)
 
 class Coupons(models.Model):
     code = models.CharField(max_length=5)
@@ -35,7 +36,7 @@ class Orders(models.Model):
     odr_date  = models.DateField(default=date.today)
     ship_addr = models.TextField(max_length=510)
     ord_qty = models.IntegerField(default=1)
-    ord_id = models.IntegerField(default=1)
+    ord_id = models.BigIntegerField(default=1)
     coupon_used = models.ForeignKey(Coupons,on_delete=models.RESTRICT,null=True)
     is_deleted = models.BooleanField(default=0)
     choices_of_mode = {
